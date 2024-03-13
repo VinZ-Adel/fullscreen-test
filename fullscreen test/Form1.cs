@@ -38,26 +38,26 @@ namespace fullscreen_test
 				KeepFocus = !KeepFocus;
 		}
 
-		[DllImport("user32.dll")]
-		internal static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+		//[DllImport("user32.dll")]
+		//internal static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
-		[DllImport("user32.dll")]
-		internal static extern IntPtr SetForegroundWindow(IntPtr hWnd);
+		//[DllImport("user32.dll")]
+		//internal static extern IntPtr SetForegroundWindow(IntPtr hWnd);
 
-		[DllImport("user32.dll")]
-		static extern IntPtr GetForegroundWindow();
+		//[DllImport("user32.dll")]
+		//static extern IntPtr GetForegroundWindow();
 
-		[DllImport("kernel32.dll")]
-		static extern int GetProcessId(IntPtr handle);
+		//[DllImport("kernel32.dll")]
+		//static extern int GetProcessId(IntPtr handle);
 
-		[DllImport("user32.dll")]
-		public static extern IntPtr GetWindowThreadProcessId(IntPtr hWnd, out nint a);
+		//[DllImport("user32.dll")]
+		//public static extern IntPtr GetWindowThreadProcessId(IntPtr hWnd, out nint a);
 
-		[DllImport("user32.dll")]
-		public static extern bool AttachThreadInput(int idAttach, int idAttatchTo, bool fAttatch);
+		//[DllImport("user32.dll")]
+		//public static extern bool AttachThreadInput(int idAttach, int idAttatchTo, bool fAttatch);
 
-		[DllImport("user32.dll")]
-		public static extern bool BringWindowToTop(IntPtr hWnd);
+		//[DllImport("user32.dll")]
+		//public static extern bool BringWindowToTop(IntPtr hWnd);
 
 
 		[DllImport("user32.dll")]
@@ -81,26 +81,30 @@ namespace fullscreen_test
 				foreach (KeyValuePair<Process, IntPtr> p in remove)
 					GamesAndMenuWithHandles.Remove(p);
 
-				IntPtr bluh = GetForegroundWindow();
-				IntPtr test = this.Handle;
+				ForceWindowIntoForeground(GamesAndMenuWithHandles[^1].Key.MainWindowHandle);
 
-				if (GamesAndMenuWithHandles.Any(c => c.Value == bluh)) { label1.Text = "same"; }
-				else if (GamesAndMenuWithHandles.Any(c => c.Key.MainWindowHandle == bluh)) { label1.Text = "SAME"; }
-				else
-					label1.Text = "not";
+				////IntPtr bluh = GetForegroundWindow();
+				////IntPtr test = this.Handle;
+
+				////if (GamesAndMenuWithHandles.Any(c => c.Value == bluh)) { label1.Text = "same"; }
+				////else if (GamesAndMenuWithHandles.Any(c => c.Key.MainWindowHandle == bluh)) { label1.Text = "SAME"; }
+				////else
+				////	label1.Text = "not";
 
 
-				Process[] processesrunning = Process.GetProcesses();
-				foreach (Process process in processesrunning)
-				{
-					if (process.MainWindowHandle == bluh)
-					{
-						AttachThreadInput(Process.GetCurrentProcess().Id, process.Id, true);
-						IntPtr hWnd = GamesAndMenuWithHandles[^1].Key.MainWindowHandle; // THIS WORkS (.Key.MainWindowHandle), .Value DOES NOT
-						BringWindowToTop(hWnd);
-						AttachThreadInput(Process.GetCurrentProcess().Id, process.Id, false);
-					}
-				}
+				////Process[] processesrunning = Process.GetProcesses();
+				////foreach (Process process in processesrunning)
+				////{
+				////	if (process.MainWindowHandle == bluh)
+				////	{
+				////		int listId = GamesAndMenuWithHandles[0].Key.Id;
+				////		int currentId = Process.GetCurrentProcess().Id;
+				////		bool attached = AttachThreadInput(currentId, process.Id, true);
+				////		IntPtr hWnd = GamesAndMenuWithHandles[^1].Key.MainWindowHandle; // THIS WORkS (.Key.MainWindowHandle), .Value DOES NOT
+				////		bool broughttotop = BringWindowToTop(hWnd);
+				////		AttachThreadInput(currentId, process.Id, false);
+				////	}
+				////}
 
 				//nint parentid;
 				//nint pid;
@@ -119,65 +123,100 @@ namespace fullscreen_test
 			else
 			{
 				foreach (KeyValuePair<Process, IntPtr> pro in GamesAndMenuWithHandles)
-					SetWindowPos(pro.Value, -2, 0, 0, 0, 0, 0x0002 | 0x0001);
+					SetWindowPos(pro.Key.MainWindowHandle, -2, 0, 0, 0, 0, 0x0002 | 0x0001);
 			} // removes topmost
 		}
 
-		private void topmost(object sender, EventArgs e) // still does not work
+
+		public static void ForceWindowIntoForeground(IntPtr window) // copypasta
 		{
-			nint parentid;
-			nint pid;
-			IntPtr bluh = GetForegroundWindow();
-			IntPtr test = this.Handle;
+			uint currentThread = Win32.GetCurrentThreadId();
 
-			if (bluh == test) { label1.Text = "same"; }
+			IntPtr activeWindow = Win32.GetForegroundWindow();
+			uint activeProcess;
+			uint activeThread = Win32.GetWindowThreadProcessId(activeWindow, out activeProcess);
 
+			uint windowProcess;
+			uint windowThread = Win32.GetWindowThreadProcessId(window, out windowProcess);
 
-			Process[] processesrunning = Process.GetProcesses();
-			foreach (Process process in processesrunning)
-			{
-				if (process.MainWindowHandle == bluh)
-				{
-					AttachThreadInput(Process.GetCurrentProcess().Id, process.Id, true);
-					IntPtr hWnd = GamesAndMenuWithHandles[^1].Value;
-					BringWindowToTop(hWnd);
-					AttachThreadInput(Process.GetCurrentProcess().Id, process.Id, false);
-				}
-			}
-			//try
-			//{
-			//	pid = GetWindowThreadProcessId(bluh, out parentid);
+			if (currentThread != activeThread)
+				Win32.AttachThreadInput(currentThread, activeThread, true);
+			if (windowThread != currentThread)
+				Win32.AttachThreadInput(windowThread, currentThread, true);
 
-			//	if (pid != 0)
-			//	{
-			//		AttachThreadInput(GamesAndMenuWithHandles[0].Key.Id, (int)pid, true);
-			//	}
-			//	else
-			//	{
-			//		AttachThreadInput(GamesAndMenuWithHandles[0].Key.Id, (int)parentid, true);
-			//	}
+			uint oldTimeout = 0, newTimeout = 0;
+			Win32.SystemParametersInfo(Win32.SPI_GETFOREGROUNDLOCKTIMEOUT, 0, ref oldTimeout, 0);
+			Win32.SystemParametersInfo(Win32.SPI_SETFOREGROUNDLOCKTIMEOUT, 0, ref newTimeout, 0);
+			Win32.LockSetForegroundWindow(Win32.LSFW_UNLOCK);
+			Win32.AllowSetForegroundWindow(Win32.ASFW_ANY);
 
-			//	IntPtr hWnd = GamesAndMenuWithHandles[^1].Value;
-			//	BringWindowToTop(hWnd);
-			//	//bool test = SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-			//	if (pid != 0 )
-			//		AttachThreadInput(GamesAndMenuWithHandles[0].Key.Id, (int)pid, false);
-			//	else
-			//		AttachThreadInput(GamesAndMenuWithHandles[0].Key.Id, (int)parentid, false);
-			//}
-			//catch { label1.Text = "Id get error"; }
+			Win32.SetForegroundWindow(window);
+			Win32.ShowWindow(window, Win32.SW_RESTORE);
+
+			Win32.SystemParametersInfo(Win32.SPI_SETFOREGROUNDLOCKTIMEOUT, 0, ref oldTimeout, 0);
+
+			if (currentThread != activeThread)
+				Win32.AttachThreadInput(currentThread, activeThread, false);
+			if (windowThread != currentThread)
+				Win32.AttachThreadInput(windowThread, currentThread, false);
 		}
+
+
+		//private void topmost(object sender, EventArgs e) // still does not work
+		//{
+		//	nint parentid;
+		//	nint pid;
+		//	IntPtr bluh = GetForegroundWindow();
+		//	IntPtr test = this.Handle;
+
+		//	if (bluh == test) { label1.Text = "same"; }
+
+
+		//	Process[] processesrunning = Process.GetProcesses();
+		//	foreach (Process process in processesrunning)
+		//	{
+		//		if (process.MainWindowHandle == bluh)
+		//		{
+		//			AttachThreadInput(Process.GetCurrentProcess().Id, process.Id, true);
+		//			IntPtr hWnd = GamesAndMenuWithHandles[^1].Value;
+		//			BringWindowToTop(hWnd);
+		//			AttachThreadInput(Process.GetCurrentProcess().Id, process.Id, false);
+		//		}
+		//	}
+		//	//try
+		//	//{
+		//	//	pid = GetWindowThreadProcessId(bluh, out parentid);
+
+		//	//	if (pid != 0)
+		//	//	{
+		//	//		AttachThreadInput(GamesAndMenuWithHandles[0].Key.Id, (int)pid, true);
+		//	//	}
+		//	//	else
+		//	//	{
+		//	//		AttachThreadInput(GamesAndMenuWithHandles[0].Key.Id, (int)parentid, true);
+		//	//	}
+
+		//	//	IntPtr hWnd = GamesAndMenuWithHandles[^1].Value;
+		//	//	BringWindowToTop(hWnd);
+		//	//	//bool test = SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+		//	//	if (pid != 0 )
+		//	//		AttachThreadInput(GamesAndMenuWithHandles[0].Key.Id, (int)pid, false);
+		//	//	else
+		//	//		AttachThreadInput(GamesAndMenuWithHandles[0].Key.Id, (int)parentid, false);
+		//	//}
+		//	//catch { label1.Text = "Id get error"; }
+		//}
 
 		// Import user32.dll (containing the function we need) and define
 		// the method corresponding to the native function.
-		[DllImport("user32.dll")]
-		private static extern int MessageBox(IntPtr hWnd, string lpText, string lpCaption, uint uType);
+		//[DllImport("user32.dll")]
+		//private static extern int MessageBox(IntPtr hWnd, string lpText, string lpCaption, uint uType);
 
-		private void button3_Click(object sender, EventArgs e)
-		{
-			// Invoke the function as a regular managed method.
-			MessageBox(IntPtr.Zero, "Command-line message box", "Attention!", 0);
-		}
+		//private void button3_Click(object sender, EventArgs e)
+		//{
+		//	// Invoke the function as a regular managed method.
+		//	MessageBox(IntPtr.Zero, "Command-line message box", "Attention!", 0);
+		//}
 
 		private void topmost_simple(object sender, EventArgs e)
 		{
